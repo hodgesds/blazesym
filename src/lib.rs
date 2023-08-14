@@ -31,6 +31,7 @@
 extern crate test;
 
 pub mod c_api;
+pub mod debuginfod;
 #[cfg(feature = "dwarf")]
 mod dwarf;
 mod elf;
@@ -57,12 +58,10 @@ use resolver::IntSym;
 use resolver::SrcLang;
 use resolver::SymResolver;
 
-
 // We import all C API items during doc creation to not have to mention the
 // `c_api` module in, say, the README.
 #[cfg(doc)]
 use c_api::*;
-
 
 pub use crate::error::Error;
 pub use crate::error::ErrorExt;
@@ -72,16 +71,13 @@ pub use crate::error::IntoError;
 /// A result type using our [`Error`] by default.
 pub type Result<T, E = Error> = result::Result<T, E>;
 
-
 /// A type representing addresses.
 pub type Addr = usize;
-
 
 /// Utility functionality not specific to any overarching theme.
 pub mod helper {
     pub use crate::normalize::buildid::read_elf_build_id;
 }
-
 
 /// An enumeration identifying a process.
 #[derive(Clone, Copy, Debug)]
@@ -106,7 +102,6 @@ impl From<u32> for Pid {
         NonZeroU32::new(pid).map(Pid::Pid).unwrap_or(Pid::Slf)
     }
 }
-
 
 #[cfg(feature = "tracing")]
 #[macro_use]

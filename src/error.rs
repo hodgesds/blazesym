@@ -1,3 +1,4 @@
+use reqwest;
 use std::borrow::Borrow;
 use std::borrow::Cow;
 use std::error;
@@ -9,7 +10,6 @@ use std::fmt::Result as FmtResult;
 use std::io;
 use std::mem::transmute;
 use std::ops::Deref;
-
 
 mod private {
     use super::*;
@@ -25,6 +25,7 @@ mod private {
     impl Sealed for io::Error {}
     #[cfg(feature = "dwarf")]
     impl Sealed for gimli::Error {}
+    impl Sealed for reqwest::Error {}
 }
 
 /// A `str` replacement whose owned representation is a `Box<str>` and
@@ -68,7 +69,6 @@ impl Display for Str {
     }
 }
 
-
 /// A helper trait to abstracting over various string types, allowing
 /// for conversion into a `Cow<'static, Str>`. This is the `Cow` enabled
 /// equivalent of `ToString`.
@@ -91,13 +91,13 @@ impl IntoCowStr for String {
     }
 }
 
-
 // TODO: We may want to support optionally storing a backtrace in
 //       terminal variants.
 enum ErrorImpl {
     #[cfg(feature = "dwarf")]
     Dwarf(gimli::Error),
     Io(io::Error),
+    Reqwest(reqwest::Error),
     // Unfortunately, if we just had a single `Context` variant that
     // contains a `Cow`, this inner `Cow` would cause an overall enum
     // size increase by a machine word, because currently `rustc`
@@ -133,6 +133,7 @@ impl ErrorImpl {
                 io::ErrorKind::OutOfMemory => ErrorKind::OutOfMemory,
                 _ => ErrorKind::Other,
             },
+            Self::Reqwest(_) => todo!(),
             Self::ContextOwned { source, .. } | Self::ContextStatic { source, .. } => {
                 source.deref().kind()
             }
@@ -166,6 +167,7 @@ impl Debug for ErrorImpl {
                     dbg = f.debug_tuple(stringify!(Io));
                     dbg.field(io)
                 }
+                Self::Reqwest(_) => todo!(),
                 Self::ContextOwned { context, .. } => {
                     dbg = f.debug_tuple(stringify!(ContextOwned));
                     dbg.field(context)
@@ -181,6 +183,7 @@ impl Debug for ErrorImpl {
                 #[cfg(feature = "dwarf")]
                 Self::Dwarf(error) => write!(f, "Error: {error}")?,
                 Self::Io(error) => write!(f, "Error: {error}")?,
+                Self::Reqwest(error) => write!(f, "Error: {error}")?,
                 Self::ContextOwned { context, .. } => write!(f, "Error: {context}")?,
                 Self::ContextStatic { context, .. } => write!(f, "Error: {context}")?,
             };
@@ -205,6 +208,7 @@ impl Display for ErrorImpl {
             #[cfg(feature = "dwarf")]
             Self::Dwarf(error) => Display::fmt(error, f)?,
             Self::Io(error) => Display::fmt(error, f)?,
+            Self::Reqwest(error) => Display::fmt(error, f)?,
             Self::ContextOwned { context, .. } => Display::fmt(context, f)?,
             Self::ContextStatic { context, .. } => Display::fmt(context, f)?,
         };
@@ -226,11 +230,11 @@ impl error::Error for ErrorImpl {
             #[cfg(feature = "dwarf")]
             Self::Dwarf(error) => error.source(),
             Self::Io(error) => error.source(),
+            Self::Reqwest(error) => error.source(),
             Self::ContextOwned { source, .. } | Self::ContextStatic { source, .. } => Some(source),
         }
     }
 }
-
 
 /// An enum providing a rough classification of errors.
 ///
@@ -274,7 +278,6 @@ pub enum ErrorKind {
     /// kind.
     Other,
 }
-
 
 /// The error type used by the library.
 ///
@@ -430,6 +433,14 @@ impl From<gimli::Error> for Error {
     }
 }
 
+impl From<reqwest::Error> for Error {
+    fn from(other: reqwest::Error) -> Self {
+        Self {
+            error: Box::new(ErrorImpl::Reqwest(other)),
+        }
+    }
+}
+
 impl From<io::Error> for Error {
     fn from(other: io::Error) -> Self {
         Self {
@@ -437,7 +448,6 @@ impl From<io::Error> for Error {
         }
     }
 }
-
 
 pub trait ErrorExt: private::Sealed {
     type Output;
@@ -541,7 +551,6 @@ impl ErrorExt for gimli::Error {
     }
 }
 
-
 /// A trait providing conversion shortcuts for creating `Error`
 /// instances.
 pub trait IntoError<T>: private::Sealed
@@ -592,7 +601,6 @@ impl<T> IntoError<T> for Option<T> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -600,7 +608,6 @@ mod tests {
     use std::mem::size_of;
 
     use test_log::test;
-
 
     /// Check various features of our `Str` wrapper type.
     #[test]
