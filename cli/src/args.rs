@@ -11,7 +11,6 @@ use clap::Args as Arguments;
 use clap::Parser;
 use clap::Subcommand;
 
-
 /// Parse a PID from a string.
 fn parse_pid(s: &str) -> Result<Pid> {
     let pid = if let Some(s) = s.strip_prefix("0x") {
@@ -32,7 +31,6 @@ fn parse_addr(s: &str) -> Result<Addr> {
         .with_context(|| format!("failed to parse address: {s}"))
 }
 
-
 /// A command line interface for blazesym.
 #[derive(Debug, Parser)]
 #[clap(version = env!("VERSION"))]
@@ -44,7 +42,6 @@ pub struct Args {
     pub verbosity: u8,
 }
 
-
 #[derive(Debug, Subcommand)]
 pub enum Command {
     /// Normalize one or more addresses.
@@ -53,8 +50,23 @@ pub enum Command {
     /// Symbolize one or more addresses.
     #[command(subcommand)]
     Symbolize(Symbolize),
+    /// Fetch debug info for one or more build ids.
+    #[command(subcommand)]
+    Debuginfo(Debuginfo),
 }
 
+#[derive(Debug, Arguments)]
+pub struct DebuginfoArgs {
+    /// The build ids to fetch.
+    pub build_ids: Vec<String>,
+}
+
+/// A type representing the `debuginfo` command.
+#[derive(Debug, Subcommand)]
+pub enum Debuginfo {
+    /// Debuginfo to fetch.
+    DebuginfoArgs(DebuginfoArgs),
+}
 
 /// A type representing the `normalize` command.
 #[derive(Debug, Subcommand)]
@@ -73,7 +85,6 @@ pub struct User {
     #[arg(value_parser = parse_addr)]
     pub addrs: Vec<Addr>,
 }
-
 
 /// A type representing the `symbolize` command.
 #[derive(Debug, Subcommand)]

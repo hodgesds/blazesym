@@ -2,11 +2,14 @@
 
 mod args;
 
+use std::fs::File;
+use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::Context;
 use anyhow::Result;
 
+use blazesym::debuginfod::DebugInfodResolver;
 use blazesym::normalize;
 use blazesym::normalize::Normalizer;
 use blazesym::symbolize;
@@ -14,12 +17,13 @@ use blazesym::symbolize::Symbolizer;
 
 use clap::Parser as _;
 
+use reqwest::blocking::Client as ReqwestClient;
+
 use tracing::subscriber::set_global_default as set_global_subscriber;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::fmt::time::SystemTime;
 use tracing_subscriber::FmtSubscriber;
-
 
 fn format_build_id_bytes(build_id: &[u8]) -> String {
     build_id
@@ -133,6 +137,22 @@ fn symbolize(symbolize: args::Symbolize) -> Result<()> {
     Ok(())
 }
 
+fn debuginfo(debuginfo: args::Debuginfo) -> Result<()> {
+    let build_ids = match debuginfo {
+        args::Debuginfo::DebuginfoArgs(args::DebuginfoArgs { build_ids }) => build_ids,
+    };
+    let resolver = DebugInfodResolver::new(
+        ReqwestClient::new(),
+        DebugInfodResolver::get_default_servers().unwrap(),
+    );
+    for build_id in build_ids.iter() {
+        let debuginfo = resolver.get_debuginfo(build_id)?;
+        let mut file = File::create(format!("{}.debuginfo", build_id))?;
+        file.write_all(&debuginfo)?;
+    }
+
+    Ok(())
+}
 
 fn main() -> Result<()> {
     let args = args::Args::parse();
@@ -155,5 +175,6 @@ fn main() -> Result<()> {
     match args.command {
         args::Command::Normalize(normalize) => self::normalize(normalize),
         args::Command::Symbolize(symbolize) => self::symbolize(symbolize),
+        args::Command::Debuginfo(debuginfo) => self::debuginfo(debuginfo),
     }
 }
